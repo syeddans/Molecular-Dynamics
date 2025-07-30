@@ -9,8 +9,8 @@ dependencies:
   - python=3.10
   - pip
   
-  # Molecular Dynamics Tools
-  - gromacs >=2021
+  # Molecular Dynamics Tools (CUDA-enabled for NVIDIA GPUs)
+  - gromacs=2025.2=nompi_cuda_h7ac747b_0
   - pymol-open-source
   - ambertools >=22
   - openbabel
@@ -32,10 +32,8 @@ dependencies:
   - wget
   - curl
   
-  # OpenCL support for GPU acceleration (cross-platform)
-  - ocl-icd            # OpenCL ICD loader
-  - cuda-opencl-dev    # NVIDIA OpenCL support (optional)
-  - intel-opencl-rt    # Intel OpenCL support (optional)
+  # CUDA support for NVIDIA GPU acceleration
+  - cudatoolkit        # CUDA runtime libraries
   
   # GPU monitoring and diagnostics  
   - gpustat           # Monitor GPU usage
