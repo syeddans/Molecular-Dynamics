@@ -236,7 +236,7 @@ rule energy_minimization:
         em_tpr = "em/em.tpr",
         em_gro = "em/em.gro",
         em_edr = "em/em.edr"
-    threads: config.get("eq_threads", "auto")
+    threads: 8
     conda: "envs/environment.yml"
     shell:
         """
@@ -260,7 +260,7 @@ rule nvt_equilibration:
         nvt_gro = "nvt/nvt.gro",
         nvt_edr = "nvt/nvt.edr",
         nvt_cpt = "nvt/nvt.cpt"
-    threads: config.get("eq_threads", "auto")
+    threads: 8
     conda: "envs/environment.yml"
     shell:
         """
@@ -285,7 +285,7 @@ rule npt_equilibration:
         npt_gro = "npt/npt.gro",
         npt_edr = "npt/npt.edr",
         npt_cpt = "npt/npt.cpt"
-    threads: config.get("eq_threads", "auto")
+    threads: 8
     conda: "envs/environment.yml"
     shell:
         """
@@ -312,7 +312,7 @@ rule production_md_apo:
         prod_edr = "md/production_apo.edr",
         prod_log = "md/production_apo.log",
         prod_cpt = "md/production_apo.cpt"
-    threads: config.get("md_threads", "auto")
+    threads: 16
     conda: "envs/environment.yml"
     shell:
         """
