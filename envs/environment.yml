@@ -32,6 +32,15 @@ dependencies:
   - wget
   - curl
   
+  # OpenCL support for GPU acceleration (cross-platform)
+  - ocl-icd            # OpenCL ICD loader
+  - cuda-opencl-dev    # NVIDIA OpenCL support (optional)
+  - intel-opencl-rt    # Intel OpenCL support (optional)
+  
+  # GPU monitoring and diagnostics  
+  - gpustat           # Monitor GPU usage
+  
   # Additional tools via pip
   - pip:
-    - acpype 
+    - acpype
+    - py3Dmol         # For 3D molecular visualization 
