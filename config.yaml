@@ -1,0 +1,30 @@
+# Configuration file for protein-ligand molecular dynamics simulation
+# Update the paths below to match your system
+
+# Input files
+holo_protein_pdb: "inputs/ERa.pdb1"      # Crystal structure
+# new_ligand_file: "inputs/ICI.sdf"       # Your compound (disabled for apo-only run)
+
+# Ligand information
+original_ligand_resn: "EST"              # Residue name of ligand in crystal structure (EST = estradiol)
+target_chain: "A"                        # Which protein chain to use (A, B, C, etc. - reduces system size)
+
+# Force field and simulation parameters
+force_field: "amber99sb-ildn"    # AMBER force field for protein
+water_model: "tip3p"             # Water model
+box_distance: 1.2                # Distance from protein to box edge (nm)
+
+# MD simulation parameters (optimized for CPU-only performance)
+md_threads: 16                   # More threads for CPU-only production MD
+eq_threads: 8                    # More threads for CPU-only equilibration
+openmp_threads: 4                # OpenMP threads per MPI process
+
+# Performance optimization settings
+use_gpu: false                   # GPU disabled for CPU-only run
+pme_ranks: 2                     # Optimal PME ranks for CPU load balancing (< total MPI ranks)
+
+# Optional: Advanced parameters (uncomment and modify if needed)
+ligand_charge: 0            # OPTIONAL: Net charge (auto-detected if not specified)
+# temperature: 300                # Temperature in Kelvin
+# pressure: 1.0                  # Pressure in bar
+# ion_concentration: 0.15        # Salt concentration in M

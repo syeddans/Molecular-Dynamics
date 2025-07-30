@@ -1,0 +1,71 @@
+; production.mdp - Production MD simulation
+; Long production run for apo protein relaxation and binding studies
+
+title       = Protein-Ligand Production MD
+
+; Run parameters
+integrator  = md            ; leap-frog integrator
+nsteps      = 50000      ; 2 * 50000 = 1 ns
+dt          = 0.002         ; 2 fs
+
+; Output control (optimized for GPU performance)
+nstxout     = 0             ; don't save coordinates (save space)
+nstvout     = 0             ; don't save velocities (save space)
+nstfout     = 0             ; don't save forces (save space)
+nstenergy   = 10000         ; save energies every 20 ps (reduced frequency for GPU performance)
+nstlog      = 10000         ; update log file every 20 ps (reduced frequency)
+nstxout-compressed = 5000   ; save compressed coordinates every 10 ps
+compressed-x-grps  = System; save the whole system
+nstcalcenergy = 1000        ; calculate energies every 2 ps (optimized for GPU)
+
+; Bond parameters
+continuation    = yes       ; Restarting after NPT
+constraint_algorithm = lincs; holonomic constraints
+constraints     = h-bonds   ; bonds involving H are constrained
+lincs_iter      = 1         ; accuracy of LINCS
+lincs_order     = 4         ; also related to accuracy
+
+; Neighbor searching (optimized for performance)
+cutoff-scheme   = Verlet    ; Buffered neighbor searching
+ns_type         = grid      ; search neighboring grid cells
+nstlist         = 200       ; 400 fs - optimized for GPU/parallel performance (guide recommends 200-300)
+rcoulomb        = 1.0       ; short-range electrostatic cutoff (in nm)
+rvdw            = 1.0       ; short-range van der Waals cutoff (in nm)
+verlet-buffer-tolerance = 0.005 ; default buffer tolerance
+
+; Electrostatics
+coulombtype     = PME       ; Particle Mesh Ewald for long-range electrostatics
+pme_order       = 4         ; cubic interpolation
+fourierspacing  = 0.16      ; grid spacing for FFT
+
+; Temperature coupling (optimized for parallel/GPU performance)
+tcoupl      = V-rescale     ; modified Berendsen thermostat
+tc-grps     = Protein Non-Protein ; two coupling groups - more accurate
+tau_t       = 1.0     1.0   ; time constant, increased for better GPU performance (guide recommends >= 50-100 steps)
+ref_t       = 300     300   ; reference temperature, one for each group, in K
+nsttcouple  = 100           ; frequency of temperature coupling (every 200 fs)
+
+; Pressure coupling (optimized for parallel/GPU performance)
+pcoupl          = Parrinello-Rahman ; Pressure coupling on
+pcoupltype      = isotropic ; uniform scaling of box vectors
+tau_p           = 5.0       ; time constant, increased for better GPU performance 
+ref_p           = 1.0       ; reference pressure, in bar
+compressibility = 4.5e-5    ; isothermal compressibility of water, bar^-1
+nstpcouple      = 100       ; frequency of pressure coupling (every 200 fs)
+
+; Periodic boundary conditions
+pbc         = xyz           ; 3-D PBC
+
+; Dispersion correction
+DispCorr    = EnerPres      ; account for cut-off vdW scheme
+
+; Velocity generation
+gen_vel     = no            ; Velocity generation is off
+
+; COM motion removal (optimized)
+nstcomm         = 1000      ; frequency for center of mass motion removal (reduced for performance)
+comm-mode       = Linear    ; remove center of mass translation
+comm-grps       = System    ; group(s) for center of mass motion removal
+
+; Free energy perturbation (optional - for enhanced sampling)
+free-energy     = no        ; no free energy calculation in this run 
