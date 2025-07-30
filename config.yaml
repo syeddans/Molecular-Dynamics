@@ -14,30 +14,18 @@ force_field: "amber99sb-ildn"    # AMBER force field for protein
 water_model: "tip3p"             # Water model
 box_distance: 1.2                # Distance from protein to box edge (nm)
 
-# GPU Settings (based on GROMACS performance guide)
-use_gpu: true                    # Enable GPU acceleration
-gpu_id: "0"                      # Single GPU ID (optimal: 1 rank per GPU)
-gpu_tasks: "auto"                # Let GROMACS auto-assign GPU tasks
-
-# MD simulation parameters (GPU-optimized based on performance guide)
-md_threads: 1                    # 1 MPI rank per GPU (optimal for GPU-resident mode)
-eq_threads: 1                    # 1 MPI rank for equilibration with GPU
-openmp_threads: 1                # Single OpenMP thread per MPI rank for GPU efficiency
-
-# Performance optimization settings
-pme_ranks: 0                     # 0 = auto-optimize PME ranks for GPU
-nstlist: 200                     # Optimized neighbor list update (200-300 recommended for GPU)
-nstcalcenergy: 1000              # Reduce energy calculation frequency for GPU efficiency
-nsttcouple: 100                  # Temperature coupling frequency (>=50-100 steps for GPU)
-nstpcouple: 100                  # Pressure coupling frequency (>=50-100 steps for GPU)
-
-# Advanced GPU settings
-constraints: "h-bonds"           # Only H-bonds constrained (required for GPU-resident mode)
-dt: 0.002                        # 2 fs timestep
-mass_repartition: false          # Set to true for 4 fs timestep with hydrogen mass repartitioning
+# Performance Settings (let GROMACS auto-detect resources)
+md_threads: "auto"               # Let GROMACS use all available resources
+eq_threads: "auto"               # Auto-detect for equilibration too
 
 # Box geometry optimization
 box_type: "dodecahedron"         # Rhombic dodecahedron for ~15% fewer water molecules
+
+# Advanced settings (optimized for performance)
+constraints: "h-bonds"           # Only H-bonds constrained (good for both CPU and GPU)
+nstlist: 200                     # Optimized neighbor list update
+nstcalcenergy: 1000              # Energy calculation frequency
+dt: 0.002                        # 2 fs timestep
 
 # Optional: Advanced parameters
 ligand_charge: 0            # OPTIONAL: Net charge (auto-detected if not specified)

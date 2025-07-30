@@ -236,11 +236,7 @@ rule energy_minimization:
         em_tpr = "em/em.tpr",
         em_gro = "em/em.gro",
         em_edr = "em/em.edr"
-    threads: config.get("eq_threads", 4)
-    params:
-        ntomp = config.get("openmp_threads", 1),
-        use_gpu = config.get("use_gpu", True),
-        gpu_ids = config.get("gpu_ids", "0")
+    threads: config.get("eq_threads", "auto")
     conda: "envs/environment.yml"
     shell:
         """
@@ -249,20 +245,8 @@ rule energy_minimization:
         # Prepare EM
         gmx grompp -f {input.em_mdp} -c {input.system_gro} -p {input.system_top} -o {output.em_tpr} -maxwarn 1
         
-        # Run EM with GPU optimization
-        if [ "{params.use_gpu}" = "True" ]; then
-            # GPU-accelerated energy minimization
-            export OMP_NUM_THREADS={params.ntomp}
-            export GMX_GPU_DD_COMMS=false
-            export GMX_GPU_PME_PP_COMMS=false
-            export GMX_FORCE_UPDATE_DEFAULT_GPU=false
-            gmx mdrun -v -deffnm em/em -nt {threads} -ntomp {params.ntomp} -gpu_id {params.gpu_ids} -pin on
-        else
-            # CPU-only fallback
-            NTMPI=$((({threads} + {params.ntomp} - 1) / {params.ntomp}))
-            export OMP_NUM_THREADS={params.ntomp}
-            gmx mdrun -v -deffnm em/em -nt {threads} -ntomp {params.ntomp} -ntmpi $NTMPI -pin on
-        fi
+        # Run EM - let GROMACS auto-detect and use all available resources
+        gmx mdrun -v -deffnm em/em
         """
 
 # NVT equilibration (temperature coupling)
@@ -276,11 +260,7 @@ rule nvt_equilibration:
         nvt_gro = "nvt/nvt.gro",
         nvt_edr = "nvt/nvt.edr",
         nvt_cpt = "nvt/nvt.cpt"
-    threads: config.get("eq_threads", 4)
-    params:
-        ntomp = config.get("openmp_threads", 1),
-        use_gpu = config.get("use_gpu", True),
-        gpu_ids = config.get("gpu_ids", "0")
+    threads: config.get("eq_threads", "auto")
     conda: "envs/environment.yml"
     shell:
         """
@@ -289,20 +269,8 @@ rule nvt_equilibration:
         # Prepare NVT
         gmx grompp -f {input.nvt_mdp} -c {input.em_gro} -r {input.em_gro} -p {input.system_top} -o {output.nvt_tpr} -maxwarn 1
         
-        # Run NVT (100 ps) with GPU optimization
-        if [ "{params.use_gpu}" = "True" ]; then
-            # GPU-accelerated NVT equilibration
-            export OMP_NUM_THREADS={params.ntomp}
-            export GMX_GPU_DD_COMMS=false
-            export GMX_GPU_PME_PP_COMMS=false
-            export GMX_FORCE_UPDATE_DEFAULT_GPU=false
-            gmx mdrun -v -deffnm nvt/nvt -nt {threads} -ntomp {params.ntomp} -gpu_id {params.gpu_ids} -pin on
-        else
-            # CPU-only fallback
-            NTMPI=$((({threads} + {params.ntomp} - 1) / {params.ntomp}))
-            export OMP_NUM_THREADS={params.ntomp}
-            gmx mdrun -v -deffnm nvt/nvt -nt {threads} -ntomp {params.ntomp} -ntmpi $NTMPI -pin on
-        fi
+        # Run NVT - let GROMACS auto-detect and use all available resources
+        gmx mdrun -v -deffnm nvt/nvt
         """
 
 # NPT equilibration (pressure coupling)
@@ -317,11 +285,7 @@ rule npt_equilibration:
         npt_gro = "npt/npt.gro",
         npt_edr = "npt/npt.edr",
         npt_cpt = "npt/npt.cpt"
-    threads: config.get("eq_threads", 1)
-    params:
-        ntomp = config.get("openmp_threads", 1),
-        use_gpu = config.get("use_gpu", True),
-        gpu_id = config.get("gpu_id", "0")
+    threads: config.get("eq_threads", "auto")
     conda: "envs/environment.yml"
     shell:
         """
@@ -330,20 +294,8 @@ rule npt_equilibration:
         # Prepare NPT  
         gmx grompp -f {input.npt_mdp} -c {input.nvt_gro} -t {input.nvt_cpt} -r {input.nvt_gro} -p {input.system_top} -o {output.npt_tpr} -maxwarn 1
         
-        # Run NPT (100 ps) with GPU optimization
-        if [ "{params.use_gpu}" = "True" ]; then
-            # GPU-accelerated NPT equilibration (optimal: 1 rank per GPU)
-            export OMP_NUM_THREADS={params.ntomp}
-            export GMX_GPU_DD_COMMS=false
-            export GMX_GPU_PME_PP_COMMS=false
-            export GMX_FORCE_UPDATE_DEFAULT_GPU=false
-            gmx mdrun -v -deffnm npt/npt -nt {threads} -ntomp {params.ntomp} -gpu_id {params.gpu_id} -pin on
-        else
-            # CPU-only fallback
-            NTMPI=$((({threads} + {params.ntomp} - 1) / {params.ntomp}))
-            export OMP_NUM_THREADS={params.ntomp}
-            gmx mdrun -v -deffnm npt/npt -nt {threads} -ntomp {params.ntomp} -ntmpi $NTMPI -pin on
-        fi
+        # Run NPT - let GROMACS auto-detect and use all available resources
+        gmx mdrun -v -deffnm npt/npt
         """
 
 # Production MD simulation (GPU-optimized long run)
@@ -360,12 +312,7 @@ rule production_md_apo:
         prod_edr = "md/production_apo.edr",
         prod_log = "md/production_apo.log",
         prod_cpt = "md/production_apo.cpt"
-    threads: config.get("md_threads", 1)
-    params:
-        ntomp = config.get("openmp_threads", 1),
-        use_gpu = config.get("use_gpu", True),
-        gpu_id = config.get("gpu_id", "0"),
-        pme_ranks = config.get("pme_ranks", 0)
+    threads: config.get("md_threads", "auto")
     conda: "envs/environment.yml"
     shell:
         """
@@ -374,36 +321,8 @@ rule production_md_apo:
         # Prepare production MD
         gmx grompp -f {input.prod_mdp} -c {input.npt_gro} -t {input.npt_cpt} -p {input.system_top} -o {output.prod_tpr} -maxwarn 1
         
-        # Run GPU-optimized production MD
-        if [ "{params.use_gpu}" = "True" ]; then
-            # GPU-accelerated production MD (1 rank per GPU optimal)
-            export OMP_NUM_THREADS={params.ntomp}
-            # Enable GPU-resident mode for maximum performance
-            export GMX_GPU_DD_COMMS=false
-            export GMX_GPU_PME_PP_COMMS=false
-            export GMX_FORCE_UPDATE_DEFAULT_GPU=true
-            
-            # Use GPU-resident mode with coordinate update on GPU
-            gmx mdrun -v -deffnm md/production_apo -nt {threads} -ntomp {params.ntomp} \
-                -gpu_id {params.gpu_id} -pin on -update gpu -nb gpu -pme gpu -bonded gpu
-        else
-            # CPU-only fallback with PME optimization
-            NTMPI=$((({threads} + {params.ntomp} - 1) / {params.ntomp}))
-            
-            if [ "{params.pme_ranks}" != "0" ] && [ "{params.pme_ranks}" != "auto" ]; then
-                if [ {params.pme_ranks} -ge $NTMPI ]; then
-                    PME_RANKS=$((NTMPI - 1))
-                else
-                    PME_RANKS={params.pme_ranks}
-                fi
-                PME_ARGS="-ntmpi $NTMPI -npme $PME_RANKS"
-            else
-                PME_ARGS="-ntmpi $NTMPI"
-            fi
-            
-            export OMP_NUM_THREADS={params.ntomp}
-            gmx mdrun -v -deffnm md/production_apo -nt {threads} -ntomp {params.ntomp} -pin on $PME_ARGS
-        fi
+        # Run production MD - let GROMACS auto-detect and use all available resources
+        gmx mdrun -v -deffnm md/production_apo
         """
 
 # Basic analysis - RMSD
