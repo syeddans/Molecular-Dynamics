@@ -9,8 +9,11 @@ dependencies:
   - python=3.10
   - pip
   
-  # Molecular Dynamics Tools (CUDA-enabled for NVIDIA GPUs)
-  - gromacs=2025.2=nompi_cuda_h7ac747b_0
+  # CUDA support (install first to resolve dependencies)  
+  - cudatoolkit=11.8
+  
+  # Molecular Dynamics Tools (EXPLICIT CUDA build - try multiple options)
+  - gromacs=2023.3=nompi_cuda_ha81c2ac_1  # Stable CUDA build
   - pymol-open-source
   - ambertools >=22
   - openbabel
@@ -31,9 +34,6 @@ dependencies:
   # System utilities
   - wget
   - curl
-  
-  # CUDA support for NVIDIA GPU acceleration
-  - cudatoolkit        # CUDA runtime libraries
   
   # GPU monitoring and diagnostics  
   - gpustat           # Monitor GPU usage
