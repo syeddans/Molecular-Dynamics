@@ -14,9 +14,7 @@ force_field: "amber99sb-ildn"    # AMBER force field for protein
 water_model: "tip3p"             # Water model
 box_distance: 1.2                # Distance from protein to box edge (nm)
 
-# Performance Settings (GROMACS will auto-detect and use available resources)
-md_threads: 16                   # Production MD threads (GROMACS will optimize CPU/GPU usage)
-eq_threads: 8                    # Equilibration threads
+# Performance Settings (GPU-optimized threading handled automatically)
 
 # Box geometry optimization
 box_type: "dodecahedron"         # Rhombic dodecahedron for ~15% fewer water molecules

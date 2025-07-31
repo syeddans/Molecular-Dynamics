@@ -236,7 +236,7 @@ rule energy_minimization:
         em_tpr = "em/em.tpr",
         em_gro = "em/em.gro",
         em_edr = "em/em.edr"
-    threads: 8
+    threads: 4
     conda: "envs/environment.yml"
     shell:
         """
@@ -245,8 +245,8 @@ rule energy_minimization:
         # Prepare EM
         gmx grompp -f {input.em_mdp} -c {input.system_gro} -p {input.system_top} -o {output.em_tpr} -maxwarn 1
         
-        # Run EM - let GROMACS auto-detect and use all available resources
-        gmx mdrun -v -deffnm em/em
+        # Run EM - GPU-optimized threading
+        gmx mdrun -v -deffnm em/em -ntmpi 1 -ntomp 4
         """
 
 # NVT equilibration (temperature coupling)
@@ -260,7 +260,7 @@ rule nvt_equilibration:
         nvt_gro = "nvt/nvt.gro",
         nvt_edr = "nvt/nvt.edr",
         nvt_cpt = "nvt/nvt.cpt"
-    threads: 8
+    threads: 4
     conda: "envs/environment.yml"
     shell:
         """
@@ -269,8 +269,8 @@ rule nvt_equilibration:
         # Prepare NVT
         gmx grompp -f {input.nvt_mdp} -c {input.em_gro} -r {input.em_gro} -p {input.system_top} -o {output.nvt_tpr} -maxwarn 1
         
-        # Run NVT - let GROMACS auto-detect and use all available resources
-        gmx mdrun -v -deffnm nvt/nvt
+        # Run NVT - GPU-optimized threading
+        gmx mdrun -v -deffnm nvt/nvt -ntmpi 1 -ntomp 4
         """
 
 # NPT equilibration (pressure coupling)
@@ -285,7 +285,7 @@ rule npt_equilibration:
         npt_gro = "npt/npt.gro",
         npt_edr = "npt/npt.edr",
         npt_cpt = "npt/npt.cpt"
-    threads: 8
+    threads: 4
     conda: "envs/environment.yml"
     shell:
         """
@@ -294,8 +294,8 @@ rule npt_equilibration:
         # Prepare NPT  
         gmx grompp -f {input.npt_mdp} -c {input.nvt_gro} -t {input.nvt_cpt} -r {input.nvt_gro} -p {input.system_top} -o {output.npt_tpr} -maxwarn 1
         
-        # Run NPT - let GROMACS auto-detect and use all available resources
-        gmx mdrun -v -deffnm npt/npt
+        # Run NPT - GPU-optimized threading
+        gmx mdrun -v -deffnm npt/npt -ntmpi 1 -ntomp 4
         """
 
 # Production MD simulation (GPU-optimized long run)
@@ -312,7 +312,7 @@ rule production_md_apo:
         prod_edr = "md/production_apo.edr",
         prod_log = "md/production_apo.log",
         prod_cpt = "md/production_apo.cpt"
-    threads: 16
+    threads: 4
     conda: "envs/environment.yml"
     shell:
         """
@@ -321,8 +321,8 @@ rule production_md_apo:
         # Prepare production MD
         gmx grompp -f {input.prod_mdp} -c {input.npt_gro} -t {input.npt_cpt} -p {input.system_top} -o {output.prod_tpr} -maxwarn 1
         
-        # Run production MD - let GROMACS auto-detect and use all available resources
-        gmx mdrun -v -deffnm md/production_apo
+        # Run production MD - GPU-optimized threading
+        gmx mdrun -v -deffnm md/production_apo -ntmpi 1 -ntomp 4
         """
 
 # Basic analysis - RMSD
