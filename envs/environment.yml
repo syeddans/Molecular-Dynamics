@@ -2,8 +2,6 @@ name: md-pipeline
 channels:
   - conda-forge
   - bioconda
-  - ambermd
-  - schrodinger
 dependencies:
   # Core Python
   - python=3.10
@@ -13,7 +11,8 @@ dependencies:
   - cudatoolkit=11.8
   
   # Molecular Dynamics Tools (EXPLICIT CUDA build - try multiple options)
-  - gromacs=2023.3=nompi_cuda_ha81c2ac_1  # Stable CUDA build
+  #- gromacs=2023.3=nompi_cuda_ha81c2ac_1  # Stable CUDA build
+  - gromacs >=2021
   - pymol-open-source
   - ambertools >=22
   - openbabel
@@ -42,3 +41,12 @@ dependencies:
   - pip:
     - acpype
     - py3Dmol         # For 3D molecular visualization 
+
+  - openbabel 
+  - mdanalysis
+  - openjdk=11
+  
+  # System dependencies (install via apt: sudo apt install mono-complete)
+  # Mono is required for running Mole2.5 on Linux systems
+  # Note: This is a system-level dependency that cannot be installed via conda
+  # Install manually: sudo apt update && sudo apt install mono-complete -y 

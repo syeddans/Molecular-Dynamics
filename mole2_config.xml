@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Tunnels>
+  <Input SpecificChains="A">../output/protein/apo_protein.pdb</Input>
+  <WorkingDirectory>./mole2_output/</WorkingDirectory>
+  <Params>
+    <Cavity ProbeRadius="3" InteriorThreshold="1.25" />
+    <Tunnel SurfaceCoverRadius="10" OriginRadius="5" AutoOriginCoverRadius="10" />
+  </Params>
+  <Export>
+    <Formats Mesh="1" PyMol="1" CSV="1" />
+    <Types Cavities="1" Tunnels="1" />
+    <Mesh Density="1.33" Compress="1" />
+    <PyMol PDBId="ERa" SurfaceType="Surface" />
+  </Export>
+  <Origins Auto="1">
+    <!-- Specific residues will be added here -->
+  </Origins>
+</Tunnels> 

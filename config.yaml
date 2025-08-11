@@ -2,17 +2,13 @@
 # Update the paths below to match your system
 
 # Input files
-holo_protein_pdb: "inputs/ERa.pdb1"      # Crystal structure
-# new_ligand_file: "inputs/ICI.sdf"       # Your compound (disabled for apo-only run)
-
-# Ligand information
-original_ligand_resn: "EST"              # Residue name of ligand in crystal structure (EST = estradiol)
-target_chain: "A"                        # Which protein chain to use (A, B, C, etc. - reduces system size)
+holo_protein_pdb: "inputs/ERa.pdb"      # Crystal structure
+new_ligand_file: "inputs/50-28-2_Estradiol.sdf"        # Your compound for holo simulation
 
 # Force field and simulation parameters
 force_field: "amber99sb-ildn"    # AMBER force field for protein
 water_model: "tip3p"             # Water model
-box_distance: 1.2                # Distance from protein to box edge (nm)
+box_distance: 0.8                # Distance from protein to box edge (nm) - smaller for closer ligand
 
 # Performance Settings (GPU-optimized threading handled automatically)
 
@@ -31,8 +27,15 @@ ligand_charge: 0            # OPTIONAL: Net charge (auto-detected if not specifi
 # pressure: 1.0                  # Pressure in bar
 # ion_concentration: 0.15        # Salt concentration in M
 
-# Simulation length parameters
-production_ns: 100              # Production run length in nanoseconds
-em_steps: 50000                  # Energy minimization steps
-nvt_steps: 50000                 # NVT equilibration steps (100 ps)
-npt_steps: 50000                 # NPT equilibration steps (100 ps)
+# Simulation length parameters (TESTING - 1 ns each)
+production_ns: 1                 # Production run length in nanoseconds
+relaxation_ns: 1                 # Relaxation MD after steered MD (10-50 ns recommended)
+em_steps: 5000                   # Energy minimization steps
+nvt_steps: 5000                  # NVT equilibration steps (10 ps)
+npt_steps: 5000                  # NPT equilibration steps (10 ps)
+
+# Steered MD parameters
+steered_md_pull_rate: 0.001      # Pull rate (nm/ps) - gentle pulling
+steered_md_force_constant: 1000  # Force constant (kJ/mol/nm²) - strong restraint
+steered_md_target_distance: 0.9  # Target distance as fraction of total distance
+steered_md_max_time: 2           # Maximum simulation time (ns)

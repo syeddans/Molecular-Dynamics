@@ -1,1 +1,4 @@
 .snakemake/
+Mole2_cmd/
+output/
+mgltools/
