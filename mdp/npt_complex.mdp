@@ -5,7 +5,7 @@ title       = NPT Equilibration (Complex)
 
 ; Run parameters
 integrator  = md        ; leap-frog integrator
-nsteps      = 50       ; 50 ps 
+nsteps      = 50000       ; 50 ps 
 dt          = 0.002     ; 2 fs
 
 ; Output control (minimal for GPU efficiency)

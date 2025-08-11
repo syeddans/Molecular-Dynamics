@@ -930,7 +930,7 @@ rule resume_simulation:
         mkdir -p output/smd
         
         # Create a 100 ns production MDP for free binding simulation
-        sed 's/nsteps.*/nsteps = 50  ; 100 ns free MD simulation/' {input.prod_mdp} > output/smd/production_100ns.mdp
+        sed 's/nsteps.*/nsteps = 5000000  ; 100 ns free MD simulation/' {input.prod_mdp} > output/smd/production_100ns.mdp
         
         # Prepare 100 ns free MD simulation (no pulling forces)
         gmx grompp -f output/smd/production_100ns.mdp -c output/best_pose/npt/npt.gro -t output/best_pose/npt/npt.cpt -p output/best_pose/ions/ion.top -o {output.smd_tpr} -maxwarn 1000
