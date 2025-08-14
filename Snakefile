@@ -669,7 +669,8 @@ rule em_pose:
         mkdir -p output/pose_runs/{wildcards.pose}/em
         
         gmx grompp -f {input.em_mdp} -c {input.ion_gro} -r {input.ion_gro} -p {input.ion_top} -o {output.em_tpr} -maxwarn 1000
-        gmx mdrun -v -deffnm output/pose_runs/{wildcards.pose}/em/em -ntmpi 1 -ntomp 1
+        export OMP_NUM_THREADS=4
+        gmx mdrun -v -deffnm output/pose_runs/{wildcards.pose}/em/em -ntmpi 1 -ntomp 4
 
         # Pose metrics after EM
         python scripts/pose_distance_metrics.py \
@@ -696,7 +697,8 @@ rule nvt_pose:
         mkdir -p output/pose_runs/{wildcards.pose}/nvt
         
         gmx grompp -f {input.nvt_mdp} -c {input.em_gro} -r {input.em_gro} -p {input.ion_top} -o {output.nvt_tpr} -maxwarn 1000
-        gmx mdrun -v -deffnm output/pose_runs/{wildcards.pose}/nvt/nvt -ntmpi 1 -ntomp 1
+        export OMP_NUM_THREADS=4
+        gmx mdrun -v -deffnm output/pose_runs/{wildcards.pose}/nvt/nvt -ntmpi 1 -ntomp 4
 
         # Pose metrics after NVT
         python scripts/pose_distance_metrics.py \
@@ -724,7 +726,8 @@ rule npt_pose:
         mkdir -p output/pose_runs/{wildcards.pose}/npt
         
         gmx grompp -f {input.npt_mdp} -c {input.nvt_gro} -r {input.nvt_gro} -t {input.nvt_cpt} -p {input.ion_top} -o {output.npt_tpr} -maxwarn 1000
-        gmx mdrun -v -deffnm output/pose_runs/{wildcards.pose}/npt/npt -ntmpi 1 -ntomp 1
+        export OMP_NUM_THREADS=4
+        gmx mdrun -v -deffnm output/pose_runs/{wildcards.pose}/npt/npt -ntmpi 1 -ntomp 4
 
         # Pose metrics after NPT
         python scripts/pose_distance_metrics.py \
@@ -754,7 +757,8 @@ rule short_smd_pose:
         
         python scripts/update_pull_mdp_from_json.py --json {input.tunnel_info} --template {input.template_mdp} --output output/pose_runs/{wildcards.pose}/smd/pull.mdp
         gmx grompp -f output/pose_runs/{wildcards.pose}/smd/pull.mdp -c {input.npt_gro} -t {input.npt_cpt} -p {input.ion_top} -o {output.tpr} -maxwarn 1000
-        gmx mdrun -v -deffnm output/pose_runs/{wildcards.pose}/smd/smd -ntmpi 1 -ntomp 1
+        export OMP_NUM_THREADS=4
+        gmx mdrun -v -deffnm output/pose_runs/{wildcards.pose}/smd/smd -ntmpi 1 -ntomp 4
         
         # Rename pull output files to match expected names
         mv output/pose_runs/{wildcards.pose}/smd/smd_pullf.xvg {output.pullf}
@@ -930,13 +934,14 @@ rule resume_simulation:
         mkdir -p output/smd
         
         # Create a 100 ns production MDP for free binding simulation
-        sed 's/nsteps.*/nsteps = 5000000  ; 100 ns free MD simulation/' {input.prod_mdp} > output/smd/production_100ns.mdp
+        sed 's/nsteps.*/nsteps = 50000000  ; 100 ns free MD simulation/' {input.prod_mdp} > output/smd/production_100ns.mdp
         
         # Prepare 100 ns free MD simulation (no pulling forces)
         gmx grompp -f output/smd/production_100ns.mdp -c output/best_pose/npt/npt.gro -t output/best_pose/npt/npt.cpt -p output/best_pose/ions/ion.top -o {output.smd_tpr} -maxwarn 1000
         
         # Run 100 ns free MD to observe natural ligand binding
-        gmx mdrun -v -deffnm output/smd/smd -ntmpi 1 -ntomp 1
+        export OMP_NUM_THREADS=4
+        gmx mdrun -v -deffnm output/smd/smd -ntmpi 1 -ntomp 4
         
         # Validate success
         if [ ! -f {output.smd_tpr} ] || [ ! -f {output.smd_xtc} ]; then

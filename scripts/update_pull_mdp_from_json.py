@@ -21,6 +21,8 @@ def main():
     pocket_nm = [c / 10.0 for c in pocket]
 
     # Direction unit vector from entrance to pocket (inward)
+    # This defines the pulling direction for GROMACS SMD
+    # With negative pull rate, ligand will be pulled along this vector (toward binding site)
     dir_vec = [p - e for p, e in zip(pocket_nm, entrance)]
     norm = sum(d * d for d in dir_vec) ** 0.5
     if norm == 0:

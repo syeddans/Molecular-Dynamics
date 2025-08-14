@@ -249,7 +249,7 @@ def main():
     parser.add_argument("--pdb", required=True, help="PDB file corresponding to residues numbering (e.g., output/pdb/clean_frame_fixed.pdb)")
     parser.add_argument("--positions_out", required=True, help="Output positions file (nm) for gmx insert-molecules -ip")
     parser.add_argument("--json_out", required=False, default="", help="Optional JSON info output")
-    parser.add_argument("--offset_nm", required=False, type=float, default=2.0, help="Offset distance outside entrance in nm")
+    parser.add_argument("--offset_nm", required=False, type=float, default=0.0, help="Offset distance outside entrance in nm (0.0 = at entrance)")
 
     args = parser.parse_args()
 
@@ -279,7 +279,7 @@ def main():
         raise ValueError("Zero-length direction vector computed; entrance equals pocket center")
     unit_dir = direction_vec_A / norm
 
-    # Convert to nm and move outside by offset along the opposite direction (out of protein)
+    # Convert to nm and place AT tunnel entrance (no offset for direct tunnel entry)
     entrance_nm = entrance_A / 10.0
     pocket_center_nm = pocket_center_A / 10.0
     
@@ -292,8 +292,8 @@ def main():
     
     # Apply the same shift to tunnel coordinates to match centered protein
     entrance_nm_centered = entrance_nm - protein_shift
-    insertion_nm_raw = entrance_nm - unit_dir * args.offset_nm
-    insertion_nm = insertion_nm_raw - protein_shift
+    # FIXED: Place ligand exactly at tunnel entrance, not offset outside
+    insertion_nm = entrance_nm_centered
     
     print(f"Original entrance: [{entrance_nm[0]:.3f}, {entrance_nm[1]:.3f}, {entrance_nm[2]:.3f}] nm")
     print(f"Centered entrance: [{entrance_nm_centered[0]:.3f}, {entrance_nm_centered[1]:.3f}, {entrance_nm_centered[2]:.3f}] nm")
