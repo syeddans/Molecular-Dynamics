@@ -64,6 +64,30 @@ def read_pdb_coords_for_residues(pdb_path: str, residues: List[int]) -> np.ndarr
     return np.array(coords, dtype=float)
 
 
+def read_protein_center_from_pdb(pdb_path: str) -> np.ndarray:
+    """Calculate the center of mass of protein from PDB file (same coordinate system as MOLE2)."""
+    coords: List[List[float]] = []
+    with open(pdb_path, "r") as f:
+        for line in f:
+            if not (line.startswith("ATOM") or line.startswith("HETATM")):
+                continue
+            try:
+                x = float(line[30:38])  # Å
+                y = float(line[38:46])  # Å
+                z = float(line[46:54])  # Å
+                coords.append([x, y, z])
+            except (ValueError, IndexError):
+                continue
+    
+    if not coords:
+        raise ValueError("No coordinates found in PDB file")
+    
+    coords_array = np.array(coords, dtype=float)
+    center_A = np.mean(coords_array, axis=0)
+    center_nm = center_A / 10.0  # Convert Å to nm
+    return center_nm
+
+
 def calc_ligand_radius_from_sdf(sdf_file: str) -> float:
     try:
         from rdkit import Chem
@@ -247,6 +271,7 @@ def main():
     parser.add_argument("--ligand_sdf", required=True, help="Ligand SDF to compute radius")
     parser.add_argument("--residues", required=True, help="File with comma-separated residue ids for pocket center (updated numbering)")
     parser.add_argument("--pdb", required=True, help="PDB file corresponding to residues numbering (e.g., output/pdb/clean_frame_fixed.pdb)")
+    parser.add_argument("--protein_pdb", required=True, help="Protein PDB file to calculate actual protein center for coordinate transformation (same coordinate system as MOLE2)")
     parser.add_argument("--positions_out", required=True, help="Output positions file (nm) for gmx insert-molecules -ip")
     parser.add_argument("--json_out", required=False, default="", help="Optional JSON info output")
     parser.add_argument("--offset_nm", required=False, type=float, default=0.0, help="Offset distance outside entrance in nm (0.0 = at entrance)")
@@ -257,6 +282,9 @@ def main():
     pocket_coords_A = read_pdb_coords_for_residues(args.pdb, residues)
     pocket_center_A = np.mean(pocket_coords_A, axis=0)
 
+    # Read actual protein center for coordinate transformation (from same PDB that MOLE2 used)
+    protein_center_nm = read_protein_center_from_pdb(args.protein_pdb)
+
     ligand_radius_A = calc_ligand_radius_from_sdf(args.ligand_sdf)
 
     tunnels = parse_mole2_tunnels(args.tunnels_xml)
@@ -264,8 +292,8 @@ def main():
     print(f"Ligand radius: {ligand_radius_A:.1f}Å")
     print(f"Pocket center: [{pocket_center_A[0]:.1f}, {pocket_center_A[1]:.1f}, {pocket_center_A[2]:.1f}]Å")
     
-    # Select best tunnel with distance validation (max 8nm = 80Å from pocket center)
-    best = select_best_tunnel(tunnels, ligand_radius_A, pocket_center_A, max_distance_A=80.0)
+    # Select best tunnel with distance validation (max 12nm = 120Å from pocket center)
+    best = select_best_tunnel(tunnels, ligand_radius_A, pocket_center_A, max_distance_A=120.0)
 
     if "entrance_A" not in best:
         raise ValueError("Selected tunnel does not contain an entrance point; cannot compute placement")
@@ -277,7 +305,10 @@ def main():
     norm = float(np.linalg.norm(direction_vec_A))
     if norm == 0.0:
         raise ValueError("Zero-length direction vector computed; entrance equals pocket center")
-    unit_dir = direction_vec_A / norm
+    unit_dir_inward = direction_vec_A / norm
+    
+    # For ligand placement, we want the opposite direction (outward from protein)
+    unit_dir_outward = -unit_dir_inward
 
     # Convert to nm and place AT tunnel entrance (no offset for direct tunnel entry)
     entrance_nm = entrance_A / 10.0
@@ -286,17 +317,38 @@ def main():
     # CRITICAL: Account for protein centering transformation
     # The protein was centered to origin [0,0,0] in simulation, but MOLE2 used original coordinates
     # We need to shift tunnel coordinates by the same amount the protein was shifted
-    protein_shift = pocket_center_nm  # This is how much the protein center moved from origin
+    protein_shift = protein_center_nm  # This is the actual protein center that was moved to origin
     
+    print(f"Original protein center: [{protein_center_nm[0]:.3f}, {protein_center_nm[1]:.3f}, {protein_center_nm[2]:.3f}] nm")
     print(f"Protein was shifted by: [{protein_shift[0]:.3f}, {protein_shift[1]:.3f}, {protein_shift[2]:.3f}] nm")
+    print(f"Pocket center (for reference): [{pocket_center_nm[0]:.3f}, {pocket_center_nm[1]:.3f}, {pocket_center_nm[2]:.3f}] nm")
     
-    # Apply the same shift to tunnel coordinates to match centered protein
-    entrance_nm_centered = entrance_nm - protein_shift
-    # Always place at exact tunnel entrance - no offset applied here
-    insertion_nm = entrance_nm_centered
+    # Check if we're using centered protein coordinates (protein center should be near origin)
+    protein_center_magnitude = np.linalg.norm(protein_center_nm)
+    
+    if protein_center_magnitude < 0.1:  # Protein is already centered (near origin)
+        print("ERROR: Using centered protein coordinates but tunnel coordinates are from original PDB!")
+        print("Need to use original protein coordinates for proper transformation.")
+        # This case shouldn't happen - we should always use original protein coordinates
+        # to match the MOLE2 coordinate system
+        raise ValueError("Coordinate system mismatch: centered protein with original tunnel coordinates")
+    else:
+        print("Using original protein coordinates - applying centering transformation")
+        # Apply the same shift to tunnel coordinates to match centered protein
+        # centered_coordinates = original_coordinates - original_protein_center
+        entrance_nm_centered = entrance_nm - protein_center_nm
+        
+        # Place ligand 3 nm away from tunnel entrance in outward direction (into solvent)
+        # This ensures no overlaps with protein atoms and provides a safe starting position
+        offset_distance_nm = 3.0  # 3 nm away from tunnel entrance
+        unit_dir_outward_nm = unit_dir_outward  # Already in correct units
+        insertion_nm = entrance_nm_centered + (unit_dir_outward_nm * offset_distance_nm)
+        
+        print(f"Placing ligand {offset_distance_nm:.1f} nm away from tunnel entrance in outward direction")
     
     print(f"Original entrance: [{entrance_nm[0]:.3f}, {entrance_nm[1]:.3f}, {entrance_nm[2]:.3f}] nm")
     print(f"Centered entrance: [{entrance_nm_centered[0]:.3f}, {entrance_nm_centered[1]:.3f}, {entrance_nm_centered[2]:.3f}] nm")
+    print(f"Final ligand position: [{insertion_nm[0]:.3f}, {insertion_nm[1]:.3f}, {insertion_nm[2]:.3f}] nm")
     
     # Validate insertion position is reasonable (now relative to centered protein)
     centered_pocket = np.array([0.0, 0.0, 0.0])  # Pocket center in simulation coordinates
@@ -307,22 +359,10 @@ def main():
     print(f"Distance from protein center: {insertion_to_protein_center:.3f} nm")
     print(f"Distance from pocket center: {insertion_to_pocket_dist:.3f} nm")
     
-    # Warn if insertion position seems too far from protein center (should be ~2-6 nm for typical proteins)
+    # Just log the distance for information - always use the actual tunnel coordinates
     if insertion_to_protein_center > 6.0:
-        print(f"WARNING: Insertion position is {insertion_to_protein_center:.1f} nm from protein center")
-        print(f"This may be too far for effective steered MD simulations")
-        
-        # Create a fallback position closer to the protein center
-        # Place ligand at a reasonable distance (4-5 nm from protein center)
-        direction_from_center = insertion_nm / np.linalg.norm(insertion_nm)  # Unit vector from origin to insertion
-        reasonable_distance = 4.5  # nm from protein center
-        fallback_insertion = direction_from_center * reasonable_distance
-        
-        print(f"Creating fallback position: [{fallback_insertion[0]:.3f}, {fallback_insertion[1]:.3f}, {fallback_insertion[2]:.3f}] nm")
-        print(f"Fallback distance from protein center: {reasonable_distance:.1f} nm")
-        
-        # Use fallback position
-        insertion_nm = fallback_insertion
+        print(f"INFO: Insertion position is {insertion_to_protein_center:.1f} nm from protein center")
+        print(f"This is the actual tunnel entrance position from MOLE2 analysis")
 
     os.makedirs(os.path.dirname(args.positions_out), exist_ok=True)
     with open(args.positions_out, "w") as f:

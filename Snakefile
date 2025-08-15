@@ -416,7 +416,9 @@ rule autodock_vina:
         original_pdb = config["holo_protein_pdb"],
         active_site_residues = "output/protein/active_site_residues.txt"
     output:
-        vina_success = "output/autodock_vina/vina.success"
+        vina_success = "output/autodock_vina/vina.success",
+        original_residues = "output/autodock_vina/active_site_residues_original.txt",
+        updated_residues = "output/autodock_vina/active_site_residues_updated.txt"
     conda: "envs/environment.yml"
     shell:
         """
@@ -436,6 +438,9 @@ rule autodock_vina:
         python scripts/fix_pdb_for_caver.py --input output/pdb/clean_frame.pdb --output output/pdb/clean_frame_fixed.pdb
         
         echo "=== DEBUG: Converting residue numbers from original to GROMACS PDB ==="
+        # Keep original residue numbers for MOLE2 (which uses original PDB coordinate system)
+        cp {input.active_site_residues} output/autodock_vina/active_site_residues_original.txt
+        
         # Convert residue numbers from original PDB to GROMACS-processed PDB
         python scripts/convert_residue_numbers.py \
             --original_pdb {input.original_pdb} \
@@ -745,7 +750,7 @@ rule short_smd_pose:
         template_mdp = "mdp/pull_short.mdp",
         active_site_residues = "output/autodock_vina/active_site_residues_updated.txt"
     output:
-        smd_top = "output/pose_runs/{pose}/smd/smd.top",
+        index = "output/pose_runs/{pose}/smd/index.ndx",
         tpr = "output/pose_runs/{pose}/smd/smd.tpr",
         pullf = "output/pose_runs/{pose}/smd/pullf.xvg",
         pullx = "output/pose_runs/{pose}/smd/pullx.xvg",
@@ -756,15 +761,16 @@ rule short_smd_pose:
         set -e
         mkdir -p output/pose_runs/{wildcards.pose}/smd
         
-        # Create topology with ActiveSite group for SMD
+        # Create index file with ActiveSite group for SMD
         python scripts/add_active_site_group.py \
+            --gro {input.npt_gro} \
             --topology {input.ion_top} \
             --residues {input.active_site_residues} \
-            --output {output.smd_top}
+            --output output/pose_runs/{wildcards.pose}/smd
         
         # Use template MDP directly - no vector calculation needed for distance geometry
         cp {input.template_mdp} output/pose_runs/{wildcards.pose}/smd/pull.mdp
-        gmx grompp -f output/pose_runs/{wildcards.pose}/smd/pull.mdp -c {input.npt_gro} -t {input.npt_cpt} -p {output.smd_top} -o {output.tpr} -maxwarn 1000
+        gmx grompp -f output/pose_runs/{wildcards.pose}/smd/pull.mdp -c {input.npt_gro} -t {input.npt_cpt} -p {input.ion_top} -n {output.index} -o {output.tpr} -maxwarn 1000
         export OMP_NUM_THREADS=4
         gmx mdrun -v -deffnm output/pose_runs/{wildcards.pose}/smd/smd -ntmpi 1 -ntomp 4
         
@@ -791,10 +797,10 @@ rule run_mole2:
     input:
         production_tpr = "output/md/production_apo.tpr",
         production_gro = "output/md/production_apo.gro",
-        original_pdb = config["holo_protein_pdb"],
         ligand_sdf = config["new_ligand_file"],
         mole2_config = "mole2_config.xml",
         active_site_residues = "output/protein/active_site_residues.txt",
+        original_residues = "output/autodock_vina/active_site_residues_original.txt",
         vina_success = "output/autodock_vina/vina.success"
     output:
         mole2_xml = "output/mole2_output/mole2_config.xml",
@@ -814,12 +820,14 @@ rule run_mole2:
         # Copy the template XML file
         cp {input.mole2_config} {output.mole2_xml}
         
+        # Keep using original apo_protein.pdb path (no change needed)
+        
         echo "=== DEBUG: Original XML content ==="
         cat {output.mole2_xml}
         
-        # Read converted residues from AutoDock Vina rule
-        residues=$(cat output/autodock_vina/active_site_residues_updated.txt)
-        echo "=== DEBUG: Converted active site residues: $residues ==="
+        # Read original residues for MOLE2 (using original PDB coordinate system)
+        residues=$(cat {input.original_residues})
+        echo "=== DEBUG: Original active site residues for MOLE2: $residues ==="
         
         # Add origins for each pocket residue to the XML
         IFS=',' read -ra RESIDUES <<< "$residues"
@@ -875,12 +883,29 @@ rule run_mole2:
         echo "Mole2 tunnel detection completed successfully" > ../{output.mole2_success}
         """
 
-# New: Compute tunnel-based ligand placement (2.0 nm outside entrance) and store vector info
+# Create centered protein PDB for MOLE2 analysis (same coordinate system as simulation)
+rule create_centered_protein_pdb:
+    input:
+        protein_gro = "output/protein/clean_apo.gro"
+    output:
+        centered_pdb = "output/protein/clean_apo_centered.pdb"
+    conda: "envs/environment.yml"
+    shell:
+        """
+        set -e
+        # Center the protein at origin (same as done in complex creation)
+        gmx editconf -f {input.protein_gro} -o output/protein/clean_apo_centered.gro -c -center 0 0 0
+        # Convert centered GRO to PDB for MOLE2 analysis
+        gmx editconf -f output/protein/clean_apo_centered.gro -o {output.centered_pdb}
+        echo "Created centered protein PDB for MOLE2 analysis"
+        """
+
+# Compute tunnel-based ligand placement using centered coordinates (no transformation needed)
 rule compute_tunnel_placement:
     input:
         tunnels_xml = "output/mole2_output/xml/tunnels.xml",
         residues = "output/autodock_vina/active_site_residues_updated.txt",
-        pdb = "output/pdb/clean_frame_fixed.pdb",
+        original_pdb = "output/protein/apo_protein.pdb",
         ligand_sdf = config["new_ligand_file"],
         mole2_success = "output/mole2_output/mole2.success"
     output:
@@ -894,7 +919,8 @@ rule compute_tunnel_placement:
             --tunnels_xml {input.tunnels_xml} \
             --ligand_sdf {input.ligand_sdf} \
             --residues {input.residues} \
-            --pdb {input.pdb} \
+            --pdb {input.original_pdb} \
+            --protein_pdb {input.original_pdb} \
             --positions_out {output.positions} \
             --json_out {output.info_json} \
             --offset_nm 0.0
