@@ -743,8 +743,9 @@ rule short_smd_pose:
         npt_cpt = "output/pose_runs/{pose}/npt/npt.cpt", 
         ion_top = "output/pose_runs/{pose}/ions/ion.top",
         template_mdp = "mdp/pull_short.mdp",
-        tunnel_info = "output/ligand/tunnel_info.json"
+        active_site_residues = "output/autodock_vina/active_site_residues_updated.txt"
     output:
+        smd_top = "output/pose_runs/{pose}/smd/smd.top",
         tpr = "output/pose_runs/{pose}/smd/smd.tpr",
         pullf = "output/pose_runs/{pose}/smd/pullf.xvg",
         pullx = "output/pose_runs/{pose}/smd/pullx.xvg",
@@ -755,8 +756,15 @@ rule short_smd_pose:
         set -e
         mkdir -p output/pose_runs/{wildcards.pose}/smd
         
-        python scripts/update_pull_mdp_from_json.py --json {input.tunnel_info} --template {input.template_mdp} --output output/pose_runs/{wildcards.pose}/smd/pull.mdp
-        gmx grompp -f output/pose_runs/{wildcards.pose}/smd/pull.mdp -c {input.npt_gro} -t {input.npt_cpt} -p {input.ion_top} -o {output.tpr} -maxwarn 1000
+        # Create topology with ActiveSite group for SMD
+        python scripts/add_active_site_group.py \
+            --topology {input.ion_top} \
+            --residues {input.active_site_residues} \
+            --output {output.smd_top}
+        
+        # Use template MDP directly - no vector calculation needed for distance geometry
+        cp {input.template_mdp} output/pose_runs/{wildcards.pose}/smd/pull.mdp
+        gmx grompp -f output/pose_runs/{wildcards.pose}/smd/pull.mdp -c {input.npt_gro} -t {input.npt_cpt} -p {output.smd_top} -o {output.tpr} -maxwarn 1000
         export OMP_NUM_THREADS=4
         gmx mdrun -v -deffnm output/pose_runs/{wildcards.pose}/smd/smd -ntmpi 1 -ntomp 4
         
@@ -889,7 +897,7 @@ rule compute_tunnel_placement:
             --pdb {input.pdb} \
             --positions_out {output.positions} \
             --json_out {output.info_json} \
-            --offset_nm 2.0
+            --offset_nm 0.0
         """
 
 rule select_best_pose:

@@ -292,7 +292,7 @@ def main():
     
     # Apply the same shift to tunnel coordinates to match centered protein
     entrance_nm_centered = entrance_nm - protein_shift
-    # FIXED: Place ligand exactly at tunnel entrance, not offset outside
+    # Always place at exact tunnel entrance - no offset applied here
     insertion_nm = entrance_nm_centered
     
     print(f"Original entrance: [{entrance_nm[0]:.3f}, {entrance_nm[1]:.3f}, {entrance_nm[2]:.3f}] nm")
