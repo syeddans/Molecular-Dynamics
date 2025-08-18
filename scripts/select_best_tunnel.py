@@ -340,11 +340,8 @@ def main():
         
         # Place ligand 3 nm away from tunnel entrance in outward direction (into solvent)
         # This ensures no overlaps with protein atoms and provides a safe starting position
-        offset_distance_nm = 3.0  # 3 nm away from tunnel entrance
         unit_dir_outward_nm = unit_dir_outward  # Already in correct units
-        insertion_nm = entrance_nm_centered + (unit_dir_outward_nm * offset_distance_nm)
-        
-        print(f"Placing ligand {offset_distance_nm:.1f} nm away from tunnel entrance in outward direction")
+        insertion_nm = entrance_nm_centered + (unit_dir_outward_nm * args.offset_nm)
     
     print(f"Original entrance: [{entrance_nm[0]:.3f}, {entrance_nm[1]:.3f}, {entrance_nm[2]:.3f}] nm")
     print(f"Centered entrance: [{entrance_nm_centered[0]:.3f}, {entrance_nm_centered[1]:.3f}, {entrance_nm_centered[2]:.3f}] nm")

@@ -414,11 +414,13 @@ rule autodock_vina:
         production_tpr = "output/md/production_apo.tpr",
         production_success = "output/md/production_apo.success",
         original_pdb = config["holo_protein_pdb"],
-        active_site_residues = "output/protein/active_site_residues.txt"
+        tunnel_entrance_residues = "output/mole2_output/tunnel_entrance_residues_original.txt",
+        tunnel_entrance_residues_updated = "output/mole2_output/tunnel_entrance_residues_updated.txt",
+        tunnel_info = "output/mole2_output/tunnel_entrance_info.json",
+        protein_active_site_residues = "output/protein/active_site_residues.txt"
     output:
         vina_success = "output/autodock_vina/vina.success",
-        original_residues = "output/autodock_vina/active_site_residues_original.txt",
-        updated_residues = "output/autodock_vina/active_site_residues_updated.txt"
+        active_site_residues_updated = "output/autodock_vina/active_site_residues_updated.txt"
     conda: "envs/environment.yml"
     shell:
         """
@@ -437,32 +439,23 @@ rule autodock_vina:
         # Fix the PDB structure using PDBFixer
         python scripts/fix_pdb_for_caver.py --input output/pdb/clean_frame.pdb --output output/pdb/clean_frame_fixed.pdb
         
-        echo "=== DEBUG: Converting residue numbers from original to GROMACS PDB ==="
-        # Keep original residue numbers for MOLE2 (which uses original PDB coordinate system)
-        cp {input.active_site_residues} output/autodock_vina/active_site_residues_original.txt
-        
-        # Convert residue numbers from original PDB to GROMACS-processed PDB
-        python scripts/convert_residue_numbers.py \
-            --original_pdb {input.original_pdb} \
-            --gromacs_pdb output/pdb/clean_frame_fixed.pdb \
-            --active_site_residues {input.active_site_residues} \
-            --output output/autodock_vina/active_site_residues_updated.txt
-        
-        echo "=== DEBUG: Reading converted residues ==="
-        residues=$(cat output/autodock_vina/active_site_residues_updated.txt)
-        echo "=== DEBUG: Converted active site residues: $residues ==="
-        
         # Convert ligand to PDBQT format
         obabel {input.ligand_sdf} -O output/autodock_vina/ligand.pdbqt --gen3d
         
-        
-        # Create binding box based on active site residues
+        # Create binding box based on tunnel entrance residues
         python scripts/clean_and_box.py \
             --input output/pdb/clean_frame_fixed.pdb \
             --clean_output output/autodock_vina/clean_protein.pdb \
             --box_output output/autodock_vina/box.txt \
-            --active_site_residues output/autodock_vina/active_site_residues_updated.txt
+            --active_site_residues {input.tunnel_entrance_residues_updated}
         
+
+        python scripts/convert_residue_numbers.py \
+            --original_pdb {input.original_pdb} \
+            --gromacs_pdb output/pdb/clean_frame_fixed.pdb \
+            --active_site_residues {input.protein_active_site_residues} \
+            --output {output.active_site_residues_updated}
+
         # Skip the problematic prepare_pdb_split_alt_confs.py and use prepare_receptor4.py directly
         # The prepare_receptor4.py script can handle the protein preparation without the split step
         mgltools/mgltools_x86_64Linux2_1.5.6/bin/pythonsh mgltools/mgltools_x86_64Linux2_1.5.6/MGLToolsPckgs/AutoDockTools/Utilities24/prepare_receptor4.py -r output/autodock_vina/clean_protein.pdb -o output/autodock_vina/clean_protein.pdbqt
@@ -748,24 +741,32 @@ rule short_smd_pose:
         npt_cpt = "output/pose_runs/{pose}/npt/npt.cpt", 
         ion_top = "output/pose_runs/{pose}/ions/ion.top",
         template_mdp = "mdp/pull_short.mdp",
-        active_site_residues = "output/autodock_vina/active_site_residues_updated.txt"
+        active_site_residues = "output/autodock_vina/active_site_residues_updated.txt",
+        original_pdb = config["holo_protein_pdb"]
     output:
         index = "output/pose_runs/{pose}/smd/index.ndx",
         tpr = "output/pose_runs/{pose}/smd/smd.tpr",
         pullf = "output/pose_runs/{pose}/smd/pullf.xvg",
         pullx = "output/pose_runs/{pose}/smd/pullx.xvg",
         success = "output/pose_runs/{pose}/smd/smd.success"
+
     conda: "envs/environment.yml"
     shell:
         """
         set -e
         mkdir -p output/pose_runs/{wildcards.pose}/smd
         
+        python scripts/convert_residue_numbers.py \
+            --original_pdb {input.original_pdb} \
+            --gromacs_pdb output/pdb/clean_frame_fixed.pdb \
+            --active_site_residues {input.active_site_residues} \
+            --output output/autodock_vina/active_site_residues_updated.txt
+        
         # Create index file with ActiveSite group for SMD
         python scripts/add_active_site_group.py \
             --gro {input.npt_gro} \
             --topology {input.ion_top} \
-            --residues {input.active_site_residues} \
+            --residues output/autodock_vina/active_site_residues_updated.txt \
             --output output/pose_runs/{wildcards.pose}/smd
         
         # Use template MDP directly - no vector calculation needed for distance geometry
@@ -799,9 +800,7 @@ rule run_mole2:
         production_gro = "output/md/production_apo.gro",
         ligand_sdf = config["new_ligand_file"],
         mole2_config = "mole2_config.xml",
-        active_site_residues = "output/protein/active_site_residues.txt",
-        original_residues = "output/autodock_vina/active_site_residues_original.txt",
-        vina_success = "output/autodock_vina/vina.success"
+        active_site_residues = "output/protein/active_site_residues.txt"
     output:
         mole2_xml = "output/mole2_output/mole2_config.xml",
         mole2_log = "output/mole2_output/mole2.log",
@@ -826,7 +825,7 @@ rule run_mole2:
         cat {output.mole2_xml}
         
         # Read original residues for MOLE2 (using original PDB coordinate system)
-        residues=$(cat {input.original_residues})
+        residues=$(cat {input.active_site_residues})
         echo "=== DEBUG: Original active site residues for MOLE2: $residues ==="
         
         # Add origins for each pocket residue to the XML
@@ -898,6 +897,44 @@ rule create_centered_protein_pdb:
         # Convert centered GRO to PDB for MOLE2 analysis
         gmx editconf -f output/protein/clean_apo_centered.gro -o {output.centered_pdb}
         echo "Created centered protein PDB for MOLE2 analysis"
+        """
+
+# Extract tunnel entrance residues from MOLE2 output for AutoDock Vina
+rule extract_tunnel_entrance_residues:
+    input:
+        tunnels_xml = "output/mole2_output/xml/tunnels.xml",
+        original_pdb = config["holo_protein_pdb"],
+        mole2_success = "output/mole2_output/mole2.success"
+    output:
+        tunnel_entrance_residues = "output/mole2_output/tunnel_entrance_residues_original.txt",
+        tunnel_entrance_residues_updated = "output/mole2_output/tunnel_entrance_residues_updated.txt",
+        tunnel_info = "output/mole2_output/tunnel_entrance_info.json"
+    conda: "envs/environment.yml"
+    shell:
+        """
+        set -e
+        
+        echo "=== Extracting tunnel entrance residues from MOLE2 output ==="
+        
+        # Extract tunnel entrance residues using original PDB coordinates (for MOLE2 coordinate system)
+        python scripts/extract_tunnel_entrance_residues.py \
+            --tunnels_xml {input.tunnels_xml} \
+            --pdb {input.original_pdb} \
+            --output {output.tunnel_entrance_residues} \
+            --cutoff 15.0 \
+            --ligand_radius 5.0 \
+            --json_out {output.tunnel_info}
+        
+        echo "=== Converting tunnel entrance residues to GROMACS numbering ==="
+        
+        # Convert residue numbers from original PDB to GROMACS-processed PDB for AutoDock Vina
+        python scripts/convert_residue_numbers.py \
+            --original_pdb {input.original_pdb} \
+            --gromacs_pdb output/pdb/clean_frame_fixed.pdb \
+            --active_site_residues {output.tunnel_entrance_residues} \
+            --output {output.tunnel_entrance_residues_updated}
+        
+        echo "=== Tunnel entrance residues extraction completed ==="
         """
 
 # Compute tunnel-based ligand placement using centered coordinates (no transformation needed)
