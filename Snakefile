@@ -666,7 +666,8 @@ rule em_pose:
     output:
         em_gro = "output/pose_runs/{pose}/em/em.gro",
         em_tpr = "output/pose_runs/{pose}/em/em.tpr",
-        em_log = "output/pose_runs/{pose}/em/em.log"
+        em_log = "output/pose_runs/{pose}/em/em.log",
+        em_vis_pdb = "output/pose_runs/{pose}/em/em_vis.pdb"
     conda: "envs/environment.yml"
     shell:
         """
@@ -677,6 +678,9 @@ rule em_pose:
         export OMP_NUM_THREADS=4
         gmx mdrun -v -deffnm output/pose_runs/{wildcards.pose}/em/em -ntmpi 1 -ntomp 4
 
+        # Create visualization PDB with proper PBC correction
+        printf "1\n0\n" | gmx trjconv -s {output.em_tpr} -f {output.em_gro} -o {output.em_vis_pdb} -pbc mol -center -ur compact
+        
         # Pose metrics after EM
         python scripts/pose_distance_metrics.py \
             --gro {output.em_gro} \
@@ -694,7 +698,8 @@ rule nvt_pose:
         nvt_gro = "output/pose_runs/{pose}/nvt/nvt.gro",
         nvt_tpr = "output/pose_runs/{pose}/nvt/nvt.tpr",
         nvt_log = "output/pose_runs/{pose}/nvt/nvt.log",
-        nvt_cpt = "output/pose_runs/{pose}/nvt/nvt.cpt"
+        nvt_cpt = "output/pose_runs/{pose}/nvt/nvt.cpt",
+        nvt_vis_pdb = "output/pose_runs/{pose}/nvt/nvt_vis.pdb"
     conda: "envs/environment.yml"
     shell:
         """
@@ -705,6 +710,9 @@ rule nvt_pose:
         export OMP_NUM_THREADS=4
         gmx mdrun -v -deffnm output/pose_runs/{wildcards.pose}/nvt/nvt -ntmpi 1 -ntomp 4
 
+        # Create visualization PDB with proper PBC correction
+        printf "1\n0\n" | gmx trjconv -s {output.nvt_tpr} -f {output.nvt_gro} -o {output.nvt_vis_pdb} -pbc mol -center -ur compact
+        
         # Pose metrics after NVT
         python scripts/pose_distance_metrics.py \
             --gro {output.nvt_gro} \
@@ -723,7 +731,8 @@ rule npt_pose:
         npt_gro = "output/pose_runs/{pose}/npt/npt.gro",
         npt_tpr = "output/pose_runs/{pose}/npt/npt.tpr",
         npt_log = "output/pose_runs/{pose}/npt/npt.log",
-        npt_cpt = "output/pose_runs/{pose}/npt/npt.cpt"
+        npt_cpt = "output/pose_runs/{pose}/npt/npt.cpt",
+        npt_vis_pdb = "output/pose_runs/{pose}/npt/npt_vis.pdb"
     conda: "envs/environment.yml"
     shell:
         """
@@ -734,6 +743,9 @@ rule npt_pose:
         export OMP_NUM_THREADS=4
         gmx mdrun -v -deffnm output/pose_runs/{wildcards.pose}/npt/npt -ntmpi 1 -ntomp 4
 
+        # Create visualization PDB with proper PBC correction
+        printf "1\n0\n" | gmx trjconv -s {output.npt_tpr} -f {output.npt_gro} -o {output.npt_vis_pdb} -pbc mol -center -ur compact
+        
         # Pose metrics after NPT
         python scripts/pose_distance_metrics.py \
             --gro {output.npt_gro} \
@@ -752,6 +764,8 @@ rule short_smd_pose:
     output:
         index = "output/pose_runs/{pose}/smd/index.ndx",
         tpr = "output/pose_runs/{pose}/smd/smd.tpr",
+        smd_gro = "output/pose_runs/{pose}/smd/smd.gro",
+        smd_vis_pdb = "output/pose_runs/{pose}/smd/smd_vis.pdb",
         pullf = "output/pose_runs/{pose}/smd/pullf.xvg",
         pullx = "output/pose_runs/{pose}/smd/pullx.xvg",
         success = "output/pose_runs/{pose}/smd/smd.success"
@@ -774,6 +788,8 @@ rule short_smd_pose:
         export OMP_NUM_THREADS=4
         gmx mdrun -v -deffnm output/pose_runs/{wildcards.pose}/smd/smd -ntmpi 1 -ntomp 4
         
+        # Create visualization PDB with proper PBC correction
+        printf "1\n0\n" | gmx trjconv -s {output.tpr} -f {output.smd_gro} -o {output.smd_vis_pdb} -pbc mol -center -ur compact  
         # Rename pull output files to match expected names
         mv output/pose_runs/{wildcards.pose}/smd/smd_pullf.xvg {output.pullf}
         mv output/pose_runs/{wildcards.pose}/smd/smd_pullx.xvg {output.pullx}
@@ -910,7 +926,7 @@ rule compute_tunnel_placement:
         mole2_success = "output/mole2_output/mole2.success"
     output:
         positions = "output/ligand/ligand_offset_vector.dat",
-        info_json = "output/ligand/tunnel_info.json"
+        info_txt = "output/ligand/tunnel_info.txt"
     conda: "envs/environment.yml"
     shell:
         """
@@ -922,8 +938,8 @@ rule compute_tunnel_placement:
             --pdb {input.original_pdb} \
             --protein_pdb {input.original_pdb} \
             --positions_out {output.positions} \
-            --json_out {output.info_json} \
-            --offset_nm 0.0
+            --tunnel_info_out {output.info_txt} \
+            --offset_nm 1.5
         """
 
 rule select_best_pose:

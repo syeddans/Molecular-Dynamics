@@ -273,7 +273,7 @@ def main():
     parser.add_argument("--pdb", required=True, help="PDB file corresponding to residues numbering (e.g., output/pdb/clean_frame_fixed.pdb)")
     parser.add_argument("--protein_pdb", required=True, help="Protein PDB file to calculate actual protein center for coordinate transformation (same coordinate system as MOLE2)")
     parser.add_argument("--positions_out", required=True, help="Output positions file (nm) for gmx insert-molecules -ip")
-    parser.add_argument("--json_out", required=False, default="", help="Optional JSON info output")
+    parser.add_argument("--tunnel_info_out", required=True, help="Output text file with best tunnel parameters")
     parser.add_argument("--offset_nm", required=False, type=float, default=0.0, help="Offset distance outside entrance in nm (0.0 = at entrance)")
 
     args = parser.parse_args()
@@ -340,7 +340,7 @@ def main():
         
         # Place ligand 3 nm away from tunnel entrance in outward direction (into solvent)
         # This ensures no overlaps with protein atoms and provides a safe starting position
-        offset_distance_nm = 3.0  # 3 nm away from tunnel entrance
+        offset_distance_nm = args.offset_nm  # 3 nm away from tunnel entrance
         unit_dir_outward_nm = unit_dir_outward  # Already in correct units
         insertion_nm = entrance_nm_centered + (unit_dir_outward_nm * offset_distance_nm)
         
@@ -368,20 +368,34 @@ def main():
     with open(args.positions_out, "w") as f:
         f.write(f"{insertion_nm[0]:.3f} {insertion_nm[1]:.3f} {insertion_nm[2]:.3f}\n")
 
-    if args.json_out:
-        info = {
-            "ligand_radius_A": ligand_radius_A,
-            "pocket_center_A": pocket_center_A.tolist(),
-            "entrance_A": entrance_A.tolist(),
-            "entrance_nm": entrance_nm.tolist(),
-            "insertion_nm": insertion_nm.tolist(),
-            "selected_tunnel": {k: v for k, v in best.items() if k in ("length_A", "bottleneck_radius_A")},
-        }
-        os.makedirs(os.path.dirname(args.json_out), exist_ok=True)
-        with open(args.json_out, "w") as jf:
-            json.dump(info, jf, indent=2)
+    # Write tunnel information to text file
+    os.makedirs(os.path.dirname(args.tunnel_info_out), exist_ok=True)
+    with open(args.tunnel_info_out, "w") as f:
+        f.write("Best Tunnel Parameters\n")
+        f.write("======================\n\n")
+        f.write(f"Ligand radius: {ligand_radius_A:.2f} Å\n")
+        f.write(f"Pocket center: [{pocket_center_A[0]:.2f}, {pocket_center_A[1]:.2f}, {pocket_center_A[2]:.2f}] Å\n\n")
+        
+        f.write("Selected Tunnel:\n")
+        f.write(f"  Length: {best.get('length_A', 'N/A'):.2f} Å\n")
+        if 'bottleneck_radius_A' in best:
+            f.write(f"  Bottleneck radius: {best['bottleneck_radius_A']:.2f} Å\n")
+        else:
+            f.write("  Bottleneck radius: N/A\n")
+        f.write(f"  Entrance position: [{entrance_A[0]:.2f}, {entrance_A[1]:.2f}, {entrance_A[2]:.2f}] Å\n")
+        f.write(f"  Entrance position (nm): [{entrance_nm[0]:.3f}, {entrance_nm[1]:.3f}, {entrance_nm[2]:.3f}] nm\n\n")
+        
+        f.write("Coordinate Transformation:\n")
+        f.write(f"  Original protein center: [{protein_center_nm[0]:.3f}, {protein_center_nm[1]:.3f}, {protein_center_nm[2]:.3f}] nm\n")
+        f.write(f"  Centered entrance: [{entrance_nm_centered[0]:.3f}, {entrance_nm_centered[1]:.3f}, {entrance_nm_centered[2]:.3f}] nm\n\n")
+        
+        f.write("Final Ligand Placement:\n")
+        f.write(f"  Insertion position: [{insertion_nm[0]:.3f}, {insertion_nm[1]:.3f}, {insertion_nm[2]:.3f}] nm\n")
+        f.write(f"  Distance from protein center: {insertion_to_protein_center:.3f} nm\n")
+        f.write(f"  Distance from pocket center: {insertion_to_pocket_dist:.3f} nm\n")
 
     print(f"Wrote insertion position to {args.positions_out}")
+    print(f"Wrote tunnel information to {args.tunnel_info_out}")
 
 
 if __name__ == "__main__":
