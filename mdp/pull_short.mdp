@@ -6,6 +6,8 @@ nstvout                 = 500
 nstenergy               = 100
 nstlog                  = 100
 nstxout-compressed      = 500
+; Checkpoint frequency for crash recovery
+nstcheckpoint           = 10000       ; Save checkpoint every 100 steps (0.1 ps)
 continuation            = yes
 constraint_algorithm    = lincs
 constraints             = h-bonds

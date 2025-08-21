@@ -784,12 +784,19 @@ rule short_smd_pose:
         
         # Use template MDP directly - no vector calculation needed for distance geometry
         cp {input.template_mdp} output/pose_runs/{wildcards.pose}/smd/pull.mdp
-        gmx grompp -f output/pose_runs/{wildcards.pose}/smd/pull.mdp -c {input.npt_gro} -t {input.npt_cpt} -p {input.ion_top} -n {output.index} -o {output.tpr} -maxwarn 1000
-        export OMP_NUM_THREADS=4
-        gmx mdrun -v -deffnm output/pose_runs/{wildcards.pose}/smd/smd -ntmpi 1 -ntomp 4
         
-        # Create visualization PDB with proper PBC correction
-        printf "1\n0\n" | gmx trjconv -s {output.tpr} -f {output.smd_gro} -o {output.smd_vis_pdb} -pbc mol -center -ur compact  
+        # Run SMD with crash recovery (let it crash when ligand reaches active site)
+        python scripts/run_smd_with_recovery.py \
+            --mdp output/pose_runs/{wildcards.pose}/smd/pull.mdp \
+            --gro {input.npt_gro} \
+            --cpt {input.npt_cpt} \
+            --top {input.ion_top} \
+            --ndx {output.index} \
+            --output output/pose_runs/{wildcards.pose}/smd/smd
+        
+        # Create visualization PDB with proper PBC correction  
+        printf "1\n0\n" | gmx trjconv -s output/pose_runs/{wildcards.pose}/smd/smd.tpr -f output/pose_runs/{wildcards.pose}/smd/smd.gro -o output/pose_runs/{wildcards.pose}/smd/smd_vis.pdb -pbc mol -center -ur compact
+        
         # Rename pull output files to match expected names
         mv output/pose_runs/{wildcards.pose}/smd/smd_pullf.xvg {output.pullf}
         mv output/pose_runs/{wildcards.pose}/smd/smd_pullx.xvg {output.pullx}
