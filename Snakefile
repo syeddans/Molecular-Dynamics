@@ -21,10 +21,6 @@ rule all:
         "output/smd/smd.xtc",
         "output/smd/smd.tpr",
 
-        # MM/PBSA final binding affinity results
-        "output/mmpbsa/binding_analysis.txt",
-        "output/mmpbsa/binding_plot.png",
-
         # Per-pose orientation screening report
         "output/pose_runs/pose_forces_summary.txt"
 
@@ -785,14 +781,15 @@ rule short_smd_pose:
         # Use template MDP directly - no vector calculation needed for distance geometry
         cp {input.template_mdp} output/pose_runs/{wildcards.pose}/smd/pull.mdp
         
-        # Run SMD with crash recovery (let it crash when ligand reaches active site)
-        python scripts/run_smd_with_recovery.py \
+        # Run SMD with distance monitoring (let it crash when ligand reaches active site)
+        python scripts/run_smd_with_distance_monitoring.py \
             --mdp output/pose_runs/{wildcards.pose}/smd/pull.mdp \
             --gro {input.npt_gro} \
             --cpt {input.npt_cpt} \
             --top {input.ion_top} \
             --ndx {output.index} \
-            --output output/pose_runs/{wildcards.pose}/smd/smd
+            --output output/pose_runs/{wildcards.pose}/smd/smd \
+            --target-distance 0.1
         
         # Create visualization PDB with proper PBC correction  
         printf "1\n0\n" | gmx trjconv -s output/pose_runs/{wildcards.pose}/smd/smd.tpr -f output/pose_runs/{wildcards.pose}/smd/smd.gro -o output/pose_runs/{wildcards.pose}/smd/smd_vis.pdb -pbc mol -center -ur compact
@@ -946,7 +943,7 @@ rule compute_tunnel_placement:
             --protein_pdb {input.original_pdb} \
             --positions_out {output.positions} \
             --tunnel_info_out {output.info_txt} \
-            --offset_nm 1.5
+            --offset_nm 3
         """
 
 rule select_best_pose:
@@ -991,14 +988,18 @@ rule resume_simulation:
         mkdir -p output/smd
         
         # Create a 100 ns production MDP for free binding simulation
-        sed 's/nsteps.*/nsteps = 50000000  ; 100 ns free MD simulation/' {input.prod_mdp} > output/smd/production_100ns.mdp
+        sed 's/nsteps.*/nsteps = 5000000  ; 100 ns free MD simulation/' {input.prod_mdp} > output/smd/production_100ns.mdp
         
         # Prepare 100 ns free MD simulation (no pulling forces)
-        gmx grompp -f output/smd/production_100ns.mdp -c output/best_pose/npt/npt.gro -t output/best_pose/npt/npt.cpt -p output/best_pose/ions/ion.top -o {output.smd_tpr} -maxwarn 1000
+        gmx grompp -f output/smd/production_100ns.mdp -c output/best_pose/smd/smd.gro -t output/best_pose/smd/smd.cpt -p output/best_pose/ions/ion.top -o {output.smd_tpr} -maxwarn 1000
         
         # Run 100 ns free MD to observe natural ligand binding
         export OMP_NUM_THREADS=4
         gmx mdrun -v -deffnm output/smd/smd -ntmpi 1 -ntomp 4
+        
+        
+        # Create visualization PDB with proper PBC correction  
+        printf "1\n0\n" | gmx trjconv -s output/smd/smd.tpr -f output/smd/smd.gro -o output/smd/smd_vis.pdb -pbc mol -center -ur compact
         
         # Validate success
         if [ ! -f {output.smd_tpr} ] || [ ! -f {output.smd_xtc} ]; then
@@ -1014,7 +1015,7 @@ rule merged_workflow:
     input:
         selection_success = "output/best_pose/selection.success",
         smd_success = "output/smd/smd.success",
-        mmpbsa_success = "output/mmpbsa/mmpbsa.success"
+        mmpbsa_success = "FINAL_RESULTS_MMPBSA.csv"
     output:
         workflow_complete = "output/workflow_complete.txt"
     shell:
@@ -1023,58 +1024,49 @@ rule merged_workflow:
         """
 
 
-rule extract_frames:
+rule mmpbsa:
     input:
         tpr = "output/smd/smd.tpr",
         xtc = "output/smd/smd.xtc",
-        smd_success = "output/smd/smd.success"
+        mmpbsa_in = "mmpbsa.in"
     output:
-        pdb_dir = directory("output/mmpbsa/frames")
-    conda: "envs/environment.yml"
-    shell:
-        """
-        set -e
-        mkdir -p {output.pdb_dir}
-        
-        # Extract frames from steered MD trajectory
-        echo "0" | gmx trjconv -s {input.tpr} -f {input.xtc} -o {output.pdb_dir}/frame.pdb -sep
-        
-        echo "Frame extraction completed successfully"
-        """
+        dat = "FINAL_RESULTS_MMPBSA.dat",
+        csv = "FINAL_RESULTS_MMPBSA.csv",
+        ndx = "index.ndx"
+    params:
+        ligand_resname = "MOL",
+        np = 4
+    threads: 4
+    log:
+        "logs/mmpbsa.log"
+    run:
+        import os
+        # ensure logs folder exists
+        os.makedirs("logs", exist_ok=True)
+
+        shell(r"""
+            set -euo pipefail
+            echo ">>> Creating fresh index.ndx with Protein and Ligand"
+
+            printf "1|13\nname 20 Protein_chain_A_MOL\nq\n" | gmx make_ndx -f {input.tpr} -o index.ndx
+
+            gmx editconf -f {input.tpr} -o mmpbsa.pdb
+            printf "20\n0\n" | gmx trjconv -s {input.tpr} -f output/smd/smd.xtc -o mmpbsa_noPBC.xtc -pbc mol -center -n -ur compact 
+            printf "20\n0\n" | gmx trjconv -s {input.tpr} -f mmpbsa_noPBC.xtc -o mmpbsa_fit.xtc -fit rot+trans -n
+            mpirun -np {params.np} gmx_MMPBSA -O \
+            -i {input.mmpbsa_in} \
+            -cs {input.tpr} \
+            -ct mmpbsa_fit.xtc \
+            -ci index.ndx \
+            -cg 1 13 \
+            -cp output/best_pose/ions/ion.top \
+            -o FINAL_RESULTS_MMPBSA.dat \
+            -eo FINAL_RESULTS_MMPBSA.csv
+           
+        """)
 
 
-rule mmpbsa_analysis:
-    input:
-        trajectory = "output/smd/smd.xtc",
-        topology = "output/smd/smd.tpr",
-        best_pose_dir = "output/best_pose/",
-        smd_success = "output/smd/smd.success"
-    output:
-        results = "output/mmpbsa/binding_analysis.txt",
-        plot = "output/mmpbsa/binding_plot.png",
-        mmpbsa_success = "output/mmpbsa/mmpbsa.success"
-    conda: "envs/environment.yml"
-    shell:
-        """
-        set -e
-        mkdir -p output/mmpbsa
-        
-        # Run MM-PBSA analysis
-        python scripts/setup_mmpbsa.py \
-            --trajectory {input.trajectory} \
-            --topology {input.topology} \
-            --system_top output/best_pose/ions/ion.top \
-            --output_results {output.results} \
-            --output_plot {output.plot}
-        
-        # Validate success
-        if [ ! -f {output.results} ] || [ ! -f {output.plot} ]; then
-            echo "Error: MM-PBSA analysis failed - output files not created"
-            exit 1
-        fi
-        
-        echo "MM-PBSA analysis completed successfully" > {output.mmpbsa_success}
-        """
+
 
 
 

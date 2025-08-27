@@ -1,13 +1,13 @@
 integrator              = md
 dt                      = 0.001
-nsteps                  = 2500000        ; 
+nsteps                  = 250000        ; 
 nstxout                 = 500
 nstvout                 = 500
 nstenergy               = 100
 nstlog                  = 100
 nstxout-compressed      = 500
 ; Checkpoint frequency for crash recovery
-nstcheckpoint           = 10000       ; Save checkpoint every 100 steps (0.1 ps)
+nstcheckpoint           = 100       ; Save checkpoint every 100 steps (0.1 ps)
 continuation            = yes
 constraint_algorithm    = lincs
 constraints             = h-bonds
@@ -38,10 +38,9 @@ pull_ncoords            = 1
 pull_ngroups            = 2
 pull_group1_name        = ActiveSite
 pull_group2_name        = MOL
-pull_coord1_type        = umbrella
+pull_coord1_type        = constant-force
 pull_coord1_geometry    = distance
 pull_coord1_groups      = 1 2
 pull_coord1_dim         = Y Y Y
 pull_coord1_start       = yes
-pull_coord1_rate        = -0.001    ; Negative rate decreases distance (pulls ligand toward active site)
-pull_coord1_k           = 100 
+pull_coord1_k           = 500     ; Constant force toward protein (negative = attractive) 

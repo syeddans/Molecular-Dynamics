@@ -1,0 +1,9 @@
+&general
+sys_name="Prot-Lig-ST",
+startframe=1,
+endframe=10,
+/
+&pb
+istrng=0.150,
+/
+
